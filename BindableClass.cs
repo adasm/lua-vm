@@ -6,8 +6,17 @@ namespace lua_vm
 {
     class BindableClass
     {
-        [VirtualMachine.Method("print")]
+        [VirtualMachine.LuaBind("a")]
+        public Double var = 3.13;
+
+        [VirtualMachine.LuaBind("write")]
         public void Print(string str)
+        {
+            Console.Write(str);
+        }
+
+        [VirtualMachine.LuaBind("line")]
+        public void PrintLine(string str)
         {
             Console.WriteLine(str);
         }

@@ -8,25 +8,35 @@ namespace lua_vm
 {
     class VirtualMachine
     {
-        public class Method : Attribute
+        public class LuaBind : Attribute
         {
-            string luaMethodName;
-            public Method(string luaMethodName)
+            string luaBindName;
+            public LuaBind(string luaBindName)
             {
-                this.luaMethodName = luaMethodName;
+                this.luaBindName = luaBindName;
             }
 
-            public string getLuaMethodName()
+            public string getLuaBindName()
             {
-                return luaMethodName;
+                return luaBindName;
             }
         }
 
         protected Lua lua = new Lua();
 
+        public LuaException lastException = null;
+
         public object[] init(string code)
         {
-            return lua.DoString(code);
+           try
+           {
+                return lua.DoString(code);
+           }
+           catch (LuaException e)
+           {
+               lastException = e;
+               return null;
+           }
         }
 
         public void close()
@@ -40,13 +50,18 @@ namespace lua_vm
         }
 
 
-        public void bind(string name, object obj, bool onlySpecifiedMethods = true)
+        public void bind(string name, object obj, bool onlyWithSpecifiedAttributes = true)
         {
             lua.NewTable(name);
             Type objType = obj.GetType();
-            foreach (MethodInfo mInfo in objType.GetMethods())
+            foreach (MethodInfo methodInfo in objType.GetMethods())
             {
-                bind(name, obj, mInfo, onlySpecifiedMethods);
+                bind(name, obj, methodInfo, onlyWithSpecifiedAttributes);
+            }
+
+            foreach (FieldInfo fieldInfo in objType.GetFields())
+            {
+                bind(name, obj, fieldInfo, onlyWithSpecifiedAttributes);
             }
         }
 
@@ -56,17 +71,48 @@ namespace lua_vm
             {
                 foreach (Attribute attr in Attribute.GetCustomAttributes(methodInfo))
                 {
-                    if (attr.GetType() == typeof(Method))
+                    if (attr.GetType() == typeof(LuaBind))
                     {
-                        Method method = (Method)attr;
-                        lua.RegisterFunction(name + "." + method.getLuaMethodName(), obj, methodInfo);
+                        LuaBind luaBind = (LuaBind)attr;
+                        register(name + "." + luaBind.getLuaBindName(), obj, methodInfo);
                     }
                 }
             }
             else
             {
-                lua.RegisterFunction(name + "." + methodInfo.Name, obj, methodInfo);
+                register(name + "." + methodInfo.Name, obj, methodInfo);
             }
+        }
+
+        protected void bind(string name, object obj, FieldInfo fieldInfo, bool checkAttributes = true)
+        {
+            if (checkAttributes)
+            {
+                foreach (Attribute attr in Attribute.GetCustomAttributes(fieldInfo))
+                {
+                    if (attr.GetType() == typeof(LuaBind))
+                    {
+                        LuaBind luaBind = (LuaBind)attr;
+                        register(name + "." + luaBind.getLuaBindName(), fieldInfo.GetValue(obj));
+                    }
+                }
+            }
+            else
+            {
+                register(name + "." + fieldInfo.Name, fieldInfo.GetValue(obj));
+            }
+        }
+
+        protected void register(string name, object obj, MethodInfo methodInfo)
+        {
+            lua.RegisterFunction(name, obj, methodInfo);
+            //Console.WriteLine("Registered method " + name);
+        }
+
+        protected void register(string name, object obj)
+        {
+            lua[name] = obj;
+            //Console.WriteLine("Registered field " + name + " with initial value " + obj);
         }
 
         public void set(string name, object obj)
@@ -82,7 +128,15 @@ namespace lua_vm
         public object[] call(string funcName, params object[] param)
         {
             LuaFunction func = lua.GetFunction(funcName);
-            return func.Call(new object[] {});
+            try
+            {
+                return func.Call(new object[] { });
+            }
+            catch (LuaException e)
+            {
+                lastException = e;
+                return null;
+            } 
         }
 
         public object[] call(string funcName)
