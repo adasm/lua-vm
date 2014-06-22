@@ -11,8 +11,8 @@ namespace lua_vm
         {
             VirtualMachine vm = new VirtualMachine();
 
-            vm.bind(new BindableClass());
-            vm.exec("print('Hello World')");
+            vm.bind("sys", new BindableClass());
+            vm.init("sys.print('Hello World')");
            
             
             Console.ReadKey();

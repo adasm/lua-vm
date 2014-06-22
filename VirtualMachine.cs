@@ -10,19 +10,24 @@ namespace lua_vm
     {
         public class Method : Attribute
         {
-            string luaName;
-            public Method(string luaName)
+            string luaMethodName;
+            public Method(string luaMethodName)
             {
-                this.luaName = luaName;
+                this.luaMethodName = luaMethodName;
             }
 
-            public string getLuaName()
+            public string getLuaMethodName()
             {
-                return luaName;
+                return luaMethodName;
             }
         }
 
-        private Lua lua = new Lua();
+        protected Lua lua = new Lua();
+
+        public object[] init(string code)
+        {
+            return lua.DoString(code);
+        }
 
         public void close()
         {
@@ -34,20 +39,33 @@ namespace lua_vm
             lua.RegisterFunction(name, obj, obj.GetType().GetMethod(methodName));
         }
 
-        public void bind(object obj)
+
+        public void bind(string name, object obj, bool onlySpecifiedMethods = true)
         {
+            lua.NewTable(name);
             Type objType = obj.GetType();
             foreach (MethodInfo mInfo in objType.GetMethods())
             {
-                foreach (Attribute attr in Attribute.GetCustomAttributes(mInfo))
+                bind(name, obj, mInfo, onlySpecifiedMethods);
+            }
+        }
+
+        protected void bind(string name, object obj, MethodInfo methodInfo, bool checkAttributes = true)
+        {
+            if (checkAttributes)
+            {
+                foreach (Attribute attr in Attribute.GetCustomAttributes(methodInfo))
                 {
                     if (attr.GetType() == typeof(Method))
                     {
                         Method method = (Method)attr;
-                        if(lua != null)
-                        lua.RegisterFunction(method.getLuaName(), obj, mInfo);
+                        lua.RegisterFunction(name + "." + method.getLuaMethodName(), obj, methodInfo);
                     }
                 }
+            }
+            else
+            {
+                lua.RegisterFunction(name + "." + methodInfo.Name, obj, methodInfo);
             }
         }
 
@@ -61,9 +79,15 @@ namespace lua_vm
             return lua[name];
         }
 
-        public object[] exec(string code)
+        public object[] call(string funcName, params object[] param)
         {
-            return lua.DoString(code);
+            LuaFunction func = lua.GetFunction(funcName);
+            return func.Call(new object[] {});
+        }
+
+        public object[] call(string funcName)
+        {
+            return call(funcName, new object[] { });
         }
 
     }
